@@ -8,7 +8,7 @@ Lorem Ipsum
 
 - Ensure python and pip are intalled AND on your PATH
 
-- `pip insall -r requirements.txt`
+- `pip install -r requirements.txt`
 
 - `python main.py`
 
