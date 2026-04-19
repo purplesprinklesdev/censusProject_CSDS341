@@ -25,10 +25,16 @@ CENSUS_PERSON_VARIABLES = [
     "RAC1P",
     "HISP",
     "AGEP",
-    "SCHL",
     "MAR",
+    "HICOV",
     "ESR",
-    "&STATE=39",  # just test ohio for now
+    "WKWN",
+    "LANX",
+    "ENG",
+    "DECADE",
+    "CIT",
+    "SCHL",
+    "&for=state:39",
 ]
 CENSUS_HOUSEHOLD_VARIABLES = [
     "SERIALNO",
@@ -39,7 +45,9 @@ CENSUS_HOUSEHOLD_VARIABLES = [
     "HUPAC",
     "GRPIP",
     "TAXAMT",
-    "&STATE=39",  # just test ohio for now
+    "TEN",
+    "WIF",
+    "&for=state:39",
 ]
 
 DB_FILE = "db.db"
@@ -144,8 +152,12 @@ if first_run:
     # fetch data
     # TODO: for household as well
     person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, api_key)
+    print(person_url)
     response = requests.get(person_url)
     data = response.json()
+
+    # for i in data:
+    #   print(i)
 
     print("Response received. Writing to database file...")
 
