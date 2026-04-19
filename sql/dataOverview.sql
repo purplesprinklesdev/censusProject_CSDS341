@@ -15,7 +15,7 @@ WITH PumaProfile AS (
             SUM(CASE WHEN p.RAC1P = (SELECT id FROM Race WHERE name=’Asian’) THEN p.PWGTP ELSE 0 END) / SUM(p.PWGTP) AS pct_race_asian,
 	        SUM(CASE WHEN p.RAC1P = (SELECT id FROM Race WHERE name=’American Indian’) THEN p.PWGTP ELSE 0 END) / SUM(p.PWGTP) AS pct_race_american_indian,
 	        SUM(CASE WHEN p.RAC1P = (SELECT id FROM Race WHERE name=’Alaska Native’) THEN p.PWGTP ELSE 0 END) / SUM(p.PWGTP) AS pct_race_alaska_native,
-	        SUM(CASE WHEN p.RAC1P = (SELECT id FROM Race WHERE name=’Native Hawaiian and Other Pacific Islander’) THEN p.PWGTP ELSE 0 END) / SUM(p.PWGTP) AS pct_race_native_hawaiian_pacific_islander,
+	        SUM(CASE WHEN p.RAC1P = (SELECT id FROM Race WHERE name=’Native Hawaiian and Pacific Islander’) THEN p.PWGTP ELSE 0 END) / SUM(p.PWGTP) AS pct_race_native_hawaiian_pacific_islander,
 	        SUM(CASE WHEN p.RAC1P = (SELECT id FROM Race WHERE name=’Some Other Race’) THEN p.PWGTP ELSE 0 END) / SUM(p.PWGTP) AS pct_some_other_race,
 	        SUM(CASE WHEN p.RAC1P = (SELECT id FROM Race WHERE name=’Two or More Races’) THEN p.PWGTP ELSE 0 END) / SUM(p.PWGTP) AS pct_two_or_more_races,
 
