@@ -1,2 +1,2 @@
-INSERT INTO Person (Serial_No, Person_ID, Person_Weight, PUMA, Sex, Marital_Status, Educational_Attainment, State)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO Person (Serial_No, Person_ID, PUMA, Person_Weight, Sex, Race, Ethnicity, Age, Educational_Attainment, Marital_Status, Employment_Status, State)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

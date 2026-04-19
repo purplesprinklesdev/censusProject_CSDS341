@@ -4,21 +4,41 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import requests
 from dotenv import load_dotenv
+from scipy.spatial.distance import mahalanobis
+from scipy.stats import chi2
+from sklearn.covariance import MinCovDet
 
 CENSUS_BASE_URL = "https://api.census.gov/data/"
 VINTAGE = "2024"
 SURVEY = "/acs/acs5/pums"
 
-CENSUS_VARIABLES = [
+CENSUS_PERSON_VARIABLES = [
     "SERIALNO",
     "SPORDER",
-    "PWGTP",
     "PUMA",
+    "PWGTP",
     "SEX",
-    "MAR",
+    "RAC1P",
+    "HISP",
+    "AGEP",
     "SCHL",
+    "MAR",
+    "ESR",
+    "&STATE=39",  # just test ohio for now
+]
+CENSUS_HOUSEHOLD_VARIABLES = [
+    "SERIALNO",
+    "PUMA",
+    "WGTP",
+    "HINCP",
+    "VALP",
+    "HUPAC",
+    "GRPIP",
+    "TAXAMT",
     "&STATE=39",  # just test ohio for now
 ]
 
@@ -39,20 +59,66 @@ def buildCensusURL(vars, apikey):
     return url
 
 
+def bellwetherPumaQuery(cur):
+    # exactly what this will end up looking like is tbd
+    """
+    try:
+        personQuery = Path(SQL_DIR + "bellwetherPumaPerson.sql").read_text(
+            encoding="utf-8"
+        )
+        householdQuery = Path(SQL_DIR + "bellwetherPumaHousehold.sql").read_text(
+            encoding="utf-8"
+        )
+    except FileNotFoundError:
+        print("Missing Critical SQL files.")
+        return
+
+    personRes = cur.execute(personQuery)
+    householdRes = cur.execute(householdQuery)
+    """
+    # change to the materialized view table
+    raw_wavgs = cur.execute("SELECT * FROM [materialized view]")
+    raw_wavgs_rows = raw_wavgs.fetchall()
+    columns = [d[0] for d in raw_wavgs.description]
+
+    puma_stats = pd.DataFrame(raw_wavgs_rows, columns=columns)
+    columns.remove("PUMA")
+    puma_stats = puma_stats.set_index("PUMA")
+    feature_cols = columns
+
+    # Slice only the feature columns for all matrix operations
+    X = puma_stats[feature_cols].values
+
+    national_vec = puma_stats[feature_cols].mean().values
+
+    robust_cov = MinCovDet(random_state=42).fit(X)
+    inv_cov = robust_cov.get_precision()  # inverse covariance matrix
+
+    distances = [mahalanobis(row, national_vec, inv_cov) for row in X]
+
+    puma_stats["mahal_dist"] = distances
+    puma_stats["p_value"] = 1 - chi2.cdf(
+        puma_stats["mahal_dist"] ** 2, df=len(feature_cols)
+    )
+
+    bellwether_ranking = puma_stats[["mahal_dist", "p_value"]].sort_values("mahal_dist")
+    print(bellwether_ranking.head(10))
+
+
 # --SETUP--
-firstRun = not os.path.isfile(DB_FILE)
+first_run = not os.path.isfile(DB_FILE)
 
 conn = sqlite3.connect(DB_FILE, autocommit=True)
 cur = conn.cursor()
 
 
-if firstRun:
+if first_run:
     # --Create Tables--
     try:
-        createTablesQuery = Path(SQL_DIR + "createTables.sql").read_text(
+        create_tables_query = Path(SQL_DIR + "createTables.sql").read_text(
             encoding="utf-8"
         )
-        insertIntoPerson = Path(SQL_DIR + "insertIntoPerson.sql").read_text(
+        insert_into_person = Path(SQL_DIR + "insertIntoPerson.sql").read_text(
             encoding="utf-8"
         )
     except FileNotFoundError:
@@ -60,7 +126,7 @@ if firstRun:
         conn.close()
         sys.exit(1)
 
-    cur.executescript(createTablesQuery)
+    cur.executescript(create_tables_query)
 
     # --Access Census Data--
     print(
@@ -68,52 +134,61 @@ if firstRun:
     )
 
     load_dotenv()
-    apiKey = os.getenv("CENSUS_API_KEY")
+    api_key = os.getenv("CENSUS_API_KEY")
 
-    if apiKey is None:
+    if api_key is None:
         print("API Key missing!")
         conn.close()
         sys.exit(1)
 
     # fetch data
     # TODO: for household as well
-    personurl = buildCensusURL(CENSUS_VARIABLES, apiKey)
-    response = requests.get(personurl)
+    person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, api_key)
+    response = requests.get(person_url)
     data = response.json()
 
     print("Response received. Writing to database file...")
 
     data.pop(0)  # remove headers
-    cur.executemany(insertIntoPerson, data)
+    cur.executemany(insert_into_person, data)
 
     print("Successfully wrote to database")
 
 print("Public Use Microdata Bellwether Finder")
 while True:
     # Read user input, process args
-    uIn = input("Enter Command: ")
+    user_in = input("Enter Command: ")
 
-    uArgs = uIn.split()
-    ucommand = uArgs[0]
-    uArgs.pop(0)
+    user_args = user_in.split()
+    user_command = user_args[0]
+    user_args.pop(0)
 
-    if ucommand.lower() == "q" or ucommand.lower() == "quit":
+    if user_command.lower() == "q" or user_command.lower() == "quit":
         conn.close()
         break
 
-    try:
-        query = Path(SQL_DIR + ucommand + ".sql").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        print("Invalid command: " + ucommand)
+    if user_command.lower() == "bellwether":
+        if user_args[0].lower() == "puma":
+            bellwetherPumaQuery(cur)
+        # else if uArgs[0].lower() == "state":
+        # bellwetherPumaQuery(cur)
+        else:
+            print('Invalid subcommand. Options are "puma" or "state"')
         continue
 
-    uArgs = uArgs[: query.count("?")]
+    try:
+        query = Path(SQL_DIR + user_command + ".sql").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        print("Invalid command: " + user_command)
+        continue
+
+    user_args = user_args[: query.count("?")]
 
     # Run SQL
-    if len(uArgs) < 1:
+    if len(user_args) < 1:
         result = cur.execute(query)
     else:
-        result = cur.execute(query, uArgs)
+        result = cur.execute(query, user_args)
 
     for row in result:
         string = ""
