@@ -34,7 +34,6 @@ CENSUS_PERSON_VARIABLES = [
     "DECADE",
     "CIT",
     "SCHL",
-    "&for=state:39",
 ]
 CENSUS_HOUSEHOLD_VARIABLES = [
     "SERIALNO",
@@ -47,7 +46,6 @@ CENSUS_HOUSEHOLD_VARIABLES = [
     "TAXAMT",
     "TEN",
     "WIF",
-    "&for=state:39",
 ]
 
 DB_FILE = "db.db"
@@ -56,15 +54,51 @@ COMMAND_FILE_PATH = "commands.txt"
 SQL_DIR = "sql/"
 
 
-def buildCensusURL(vars, apikey):
+def buildCensusURL(vars, state, apikey):
     url = CENSUS_BASE_URL + VINTAGE + SURVEY + "?get="
     for var in vars:
         if var[0] == "&":
             url = url[:-1]
         url += var + ","
     url = url[:-1]
+    url += "&for=state:" + state
     url += "&key=" + apikey
     return url
+
+def populateTables(state, api_key)
+    try:
+        insert_into_person = Path(SQL_DIR + "insertIntoPerson.sql").read_text(
+            encoding="utf-8"
+        )
+        insert_into_household = Path(SQL_DIR + "insertIntoHousehold.sql").read_text(
+            encoding="utf-8"
+        )
+    except FileNotFoundError:
+        print("Missing Critical SQL files. Please redownload the repo.")
+        conn.close()
+        sys.exit(1)
+
+
+    print("Fetching Person Data... State " + state)
+    person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, state, api_key)
+    p_response = requests.get(person_url)
+    p_data = p_response.json()
+
+    print("Fetching Household Data... State" + state)
+    household_url = buildCensusURL(CENSUS_HOUSEHOLD_VARIABLES, state, api_key)
+    h_response = requests.get(household_url)
+    h_data = h_response.json()
+
+    print("Response received. Writing to database file...")
+
+    # remove headers
+    p_data.pop(0)
+    h_data.pop(0)
+
+    cur.executemany(insert_into_person, p_data)
+    cur.executemany(insert_into_household, h_data)
+
+    print("Successfully wrote to database. State " + state)
 
 
 def bellwetherPumaQuery(cur):
@@ -121,15 +155,20 @@ cur = conn.cursor()
 
 
 if first_run:
+    print("Database File does not exist, creating tables.")
+
     # --Create Tables--
     try:
         create_tables_query = Path(SQL_DIR + "createTables.sql").read_text(
             encoding="utf-8"
         )
-        insert_into_person = Path(SQL_DIR + "insertIntoPerson.sql").read_text(
+        insert_into_mapping = Path(SQL_DIR + "insertIntoMapping.sql").read_text(
             encoding="utf-8"
         )
-        insert_into_household = Path(SQL_DIR + "insertIntoHousehold.sql").read_text(
+        bellwether_puma = Path(SQL_DIR + "bellwetherPuma.sql").read_text(
+            encoding="utf-8"
+        )
+        bellwether_state = Path(SQL_DIR + "bellwetherPuma.sql").read_text(
             encoding="utf-8"
         )
     except FileNotFoundError:
@@ -138,41 +177,13 @@ if first_run:
         sys.exit(1)
 
     cur.executescript(create_tables_query)
+    cur.executescript(insert_into_mapping)
+    cur.executescript(bellwether_puma)
+    cur.executescript(bellwether_state)
 
-    # --Access Census Data--
-    print(
-        "Database File does not exist, attempting to pull data from api.census.gov..."
-    )
+    print("Pull census data with \"pull [STATE ABBREVIATION]\" or \"pull all\".")
 
-    load_dotenv()
-    api_key = os.getenv("CENSUS_API_KEY")
-
-    if api_key is None:
-        print("API Key missing!")
-        conn.close()
-        sys.exit(1)
-
-    print("Fetching Person Data...")
-    person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, api_key)
-    p_response = requests.get(person_url)
-    p_data = p_response.json()
-
-    print("Fetching Household Data...")
-    household_url = buildCensusURL(CENSUS_HOUSEHOLD_VARIABLES, api_key)
-    h_response = requests.get(household_url)
-    h_data = h_response.json()
-
-    print("Response received. Writing to database file...")
-
-    # remove headers
-    p_data.pop(0)
-    h_data.pop(0)
-
-    cur.executemany(insert_into_person, p_data)
-    cur.executemany(insert_into_household, h_data)
-
-    print("Successfully wrote to database")
-
+# Main Execution Loop
 print("Public Use Microdata Bellwether Finder")
 while True:
     # Read user input, process args
@@ -182,18 +193,45 @@ while True:
     user_command = user_args[0]
     user_args.pop(0)
 
-    if user_command.lower() == "q" or user_command.lower() == "quit":
-        conn.close()
-        break
+    match user_command.lower():
+        case "q":
+            conn.close()
+            break
+        case "quit":
+            conn.close()
+            break
+        case "bellwether":
+            if user_args[0].lower() == "puma":
+                bellwetherPumaQuery(cur)
+            # else if uArgs[0].lower() == "state":
+            # bellwetherPumaQuery(cur)
+            else:
+                print('Invalid subcommand. Options are "puma" or "state"')
+            continue
+        case "pull":
+            try:
+                print("This may take a while...")
+                load_dotenv()
+                api_key = os.getenv("CENSUS_API_KEY")
 
-    if user_command.lower() == "bellwether":
-        if user_args[0].lower() == "puma":
-            bellwetherPumaQuery(cur)
-        # else if uArgs[0].lower() == "state":
-        # bellwetherPumaQuery(cur)
-        else:
-            print('Invalid subcommand. Options are "puma" or "state"')
-        continue
+                if api_key is None:
+                    print("API Key missing!")
+                    conn.close()
+                    sys.exit(1)
+
+                if user_args[0].lower() == "all":
+                    query = "SELECT State FROM State"
+                    res = cur.execute(query)
+                    for row in res:
+                        populateTables(row[0], api_key)
+                else:
+                    query = "SELECT State FROM State WHERE abbrev='?'"
+                    res = cur.execute(query, user_args[0])
+                    for row in res:
+                        populateTables(row[0], api_key)
+            except:
+                print("Error: Invalid Arguments caused a SQL Error")
+                continue
 
     try:
         query = Path(SQL_DIR + user_command + ".sql").read_text(encoding="utf-8")
