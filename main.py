@@ -129,6 +129,9 @@ if first_run:
         insert_into_person = Path(SQL_DIR + "insertIntoPerson.sql").read_text(
             encoding="utf-8"
         )
+        insert_into_household = Path(SQL_DIR + "insertIntoHousehold.sql").read_text(
+            encoding="utf-8"
+        )
     except FileNotFoundError:
         print("Missing SQL files. Please redownload the repo.")
         conn.close()
@@ -149,20 +152,24 @@ if first_run:
         conn.close()
         sys.exit(1)
 
-    # fetch data
-    # TODO: for household as well
+    print("Fetching Person Data...")
     person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, api_key)
-    print(person_url)
-    response = requests.get(person_url)
-    data = response.json()
+    p_response = requests.get(person_url)
+    p_data = p_response.json()
 
-    # for i in data:
-    #   print(i)
+    print("Fetching Household Data...")
+    household_url = buildCensusURL(CENSUS_HOUSEHOLD_VARIABLES, api_key)
+    h_response = requests.get(household_url)
+    h_data = h_response.json()
 
     print("Response received. Writing to database file...")
 
-    data.pop(0)  # remove headers
-    cur.executemany(insert_into_person, data)
+    # remove headers
+    p_data.pop(0)
+    h_data.pop(0)
+
+    cur.executemany(insert_into_person, p_data)
+    cur.executemany(insert_into_household, h_data)
 
     print("Successfully wrote to database")
 
