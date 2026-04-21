@@ -9,7 +9,7 @@ import requests
 from dotenv import load_dotenv
 
 # The following imports are our statistics libraries
-# for calculatning bellwethers
+# for calculating bellwethers
 from scipy.spatial.distance import mahalanobis
 from scipy.stats import chi2
 from sklearn.covariance import LedoitWolf
@@ -53,7 +53,6 @@ CENSUS_HOUSEHOLD_VARIABLES = [
 
 DB_FILE = "db.db"
 COMMAND_FILE_PATH = "commands.txt"
-
 SQL_DIR = "sql/"
 
 
@@ -152,7 +151,7 @@ cur = conn.cursor()
 
 
 if first_run:
-    print("Database File does not exist, creating tables.")
+    print("Database file does not exist yet. Creating tables...")
 
     # --Create Tables--
     try:
@@ -183,7 +182,9 @@ if first_run:
         conn.close()
         sys.exit(1)
 
-    print('Pull census data with "pull [STATE ABBREVIATION]" or "pull all".\n')
+    print('Tables created. Populate tables using the pull command as follows: ')
+    print('Pull census data with "pull [STATE ABBREVIATION]" or "pull all".')
+    print('e.g. pull OH\n')
 
 # Main Execution Loop
 print("Public Use Microdata Bellwether Finder")

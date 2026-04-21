@@ -9,7 +9,7 @@ A PUMA (Public Use Microdata Area) is the smallest geographic distinction in the
 
 - Clone the repo
 
-- Ensure python and pip are intalled AND on your PATH
+- Ensure python and pip are installed AND on your PATH
 
 - `pip install -r requirements.txt`
 
@@ -19,8 +19,8 @@ You should now see a prompt that says `Enter Command:`. Try "countUnder 20", and
 
 ## List of SQL Commands
 - avgAge: computes the average age of people in the dataset
-- bellwetherPuma: ranks bellwether PUMAs of the downloaded dataset
-- bellwetherState: ranks bellwether states
+- bellwether puma: ranks bellwether PUMAs of the downloaded dataset
+- bellwether state: ranks bellwether states
 - countUnder: counts all people under a given age (e.g. "countUnder 20")
 - eligibleVotersByPuma: counts citizens over the age of 18
 - multilingualWorkersNoHIByRace: finds multilingual workers with no health insurance
