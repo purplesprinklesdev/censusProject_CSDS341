@@ -7,9 +7,13 @@ from pathlib import Path
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+
+# The following imports are our statistics libraries
+# for calculatning bellwethers
 from scipy.spatial.distance import mahalanobis
 from scipy.stats import chi2
-from sklearn.covariance import MinCovDet
+from sklearn.covariance import LedoitWolf
+from sklearn.preprocessing import StandardScaler
 
 CENSUS_BASE_URL = "https://api.census.gov/data/"
 VINTAGE = "2024"
@@ -111,19 +115,23 @@ def bellwetherPumaQuery(cur):
     puma_stats = puma_stats.set_index("PUMA")
     feature_cols = columns
 
-    with pd.option_context(
-        "display.max_rows", None, "display.max_columns", None
-    ):  # more options can be specified also
-        print(puma_stats)
+    # All of this math and statistics heavy stuff was
+    # handled mostly by Claude Sonnet 4.6
 
     X = puma_stats[feature_cols].values
 
     national_vec = puma_stats[feature_cols].mean().values
 
-    robust_cov = MinCovDet(random_state=42).fit(X)
-    inv_cov = robust_cov.get_precision()
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    national_scaled = scaler.transform(national_vec.reshape(1, -1))
 
-    distances = [mahalanobis(row, national_vec, inv_cov) for row in X]
+    # LedoitWolf handles near-singular matrices via shrinkage
+    lw_cov = LedoitWolf().fit(X_scaled)
+    inv_cov = lw_cov.get_precision()
+
+    # Compute distances
+    distances = [mahalanobis(row, national_scaled[0], inv_cov) for row in X_scaled]
 
     puma_stats["mahal_dist"] = distances
     puma_stats["p_value"] = 1 - chi2.cdf(
