@@ -8,7 +8,7 @@ INSERT INTO Race (id, name) VALUES
 (8, 'Some Other Race'),
 (9, 'Two or More Races');
 
-INSERT INTO State (id, abbrev) VALUES
+INSERT INTO State (State, abbrev) VALUES
 (47, 'TN'),
 (04, 'AZ'),
 (05, 'AR'),

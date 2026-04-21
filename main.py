@@ -4,7 +4,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
@@ -25,6 +24,7 @@ CENSUS_PERSON_VARIABLES = [
     "RAC1P",
     "HISP",
     "AGEP",
+    "SCHL",
     "MAR",
     "HICOV",
     "ESR",
@@ -33,7 +33,6 @@ CENSUS_PERSON_VARIABLES = [
     "ENG",
     "DECADE",
     "CIT",
-    "SCHL",
 ]
 CENSUS_HOUSEHOLD_VARIABLES = [
     "SERIALNO",
@@ -61,11 +60,12 @@ def buildCensusURL(vars, state, apikey):
             url = url[:-1]
         url += var + ","
     url = url[:-1]
-    url += "&for=state:" + state
+    url += "&for=state:" + str(state)
     url += "&key=" + apikey
     return url
 
-def populateTables(state, api_key)
+
+def populateTables(state, api_key):
     try:
         insert_into_person = Path(SQL_DIR + "insertIntoPerson.sql").read_text(
             encoding="utf-8"
@@ -78,13 +78,12 @@ def populateTables(state, api_key)
         conn.close()
         sys.exit(1)
 
-
-    print("Fetching Person Data... State " + state)
+    print("Fetching Person Data... State " + str(state))
     person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, state, api_key)
     p_response = requests.get(person_url)
     p_data = p_response.json()
 
-    print("Fetching Household Data... State" + state)
+    print("Fetching Household Data... State" + str(state))
     household_url = buildCensusURL(CENSUS_HOUSEHOLD_VARIABLES, state, api_key)
     h_response = requests.get(household_url)
     h_data = h_response.json()
@@ -98,28 +97,12 @@ def populateTables(state, api_key)
     cur.executemany(insert_into_person, p_data)
     cur.executemany(insert_into_household, h_data)
 
-    print("Successfully wrote to database. State " + state)
+    print("Successfully wrote to database. State " + str(state))
 
 
 def bellwetherPumaQuery(cur):
-    # exactly what this will end up looking like is tbd
-    """
-    try:
-        personQuery = Path(SQL_DIR + "bellwetherPumaPerson.sql").read_text(
-            encoding="utf-8"
-        )
-        householdQuery = Path(SQL_DIR + "bellwetherPumaHousehold.sql").read_text(
-            encoding="utf-8"
-        )
-    except FileNotFoundError:
-        print("Missing Critical SQL files.")
-        return
-
-    personRes = cur.execute(personQuery)
-    householdRes = cur.execute(householdQuery)
-    """
     # change to the materialized view table
-    raw_wavgs = cur.execute("SELECT * FROM [materialized view]")
+    raw_wavgs = cur.execute("SELECT * FROM PumaProfile")
     raw_wavgs_rows = raw_wavgs.fetchall()
     columns = [d[0] for d in raw_wavgs.description]
 
@@ -128,13 +111,17 @@ def bellwetherPumaQuery(cur):
     puma_stats = puma_stats.set_index("PUMA")
     feature_cols = columns
 
-    # Slice only the feature columns for all matrix operations
+    with pd.option_context(
+        "display.max_rows", None, "display.max_columns", None
+    ):  # more options can be specified also
+        print(puma_stats)
+
     X = puma_stats[feature_cols].values
 
     national_vec = puma_stats[feature_cols].mean().values
 
     robust_cov = MinCovDet(random_state=42).fit(X)
-    inv_cov = robust_cov.get_precision()  # inverse covariance matrix
+    inv_cov = robust_cov.get_precision()
 
     distances = [mahalanobis(row, national_vec, inv_cov) for row in X]
 
@@ -179,9 +166,9 @@ if first_run:
     cur.executescript(create_tables_query)
     cur.executescript(insert_into_mapping)
     cur.executescript(bellwether_puma)
-    cur.executescript(bellwether_state)
+    # cur.executescript(bellwether_state)
 
-    print("Pull census data with \"pull [STATE ABBREVIATION]\" or \"pull all\".")
+    print('Pull census data with "pull [STATE ABBREVIATION]" or "pull all".\n')
 
 # Main Execution Loop
 print("Public Use Microdata Bellwether Finder")
@@ -209,29 +196,27 @@ while True:
                 print('Invalid subcommand. Options are "puma" or "state"')
             continue
         case "pull":
-            try:
-                print("This may take a while...")
-                load_dotenv()
-                api_key = os.getenv("CENSUS_API_KEY")
+            print("This may take a while...")
+            load_dotenv()
+            api_key = os.getenv("CENSUS_API_KEY")
 
-                if api_key is None:
-                    print("API Key missing!")
-                    conn.close()
-                    sys.exit(1)
+            if api_key is None:
+                print("API Key missing!")
+                conn.close()
+                sys.exit(1)
 
-                if user_args[0].lower() == "all":
-                    query = "SELECT State FROM State"
-                    res = cur.execute(query)
-                    for row in res:
-                        populateTables(row[0], api_key)
-                else:
-                    query = "SELECT State FROM State WHERE abbrev='?'"
-                    res = cur.execute(query, user_args[0])
-                    for row in res:
-                        populateTables(row[0], api_key)
-            except:
-                print("Error: Invalid Arguments caused a SQL Error")
-                continue
+            if user_args[0].lower() == "all":
+                query = "SELECT State FROM State"
+                res = cur.execute(query)
+                for row in res:
+                    populateTables(row[0], api_key)
+            else:
+                query = "SELECT State FROM State WHERE abbrev=?"
+                print(user_args[0])
+                res = cur.execute(query, (user_args[0],))
+                for row in res:
+                    populateTables(row[0], api_key)
+            continue
 
     try:
         query = Path(SQL_DIR + user_command + ".sql").read_text(encoding="utf-8")
