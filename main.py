@@ -111,8 +111,9 @@ def bellwetherPumaQuery(cur):
     columns = [d[0] for d in raw_wavgs.description]
 
     puma_stats = pd.DataFrame(raw_wavgs_rows, columns=columns)
+    columns.remove("STATE")
     columns.remove("PUMA")
-    puma_stats = puma_stats.set_index("PUMA")
+    puma_stats = puma_stats.set_index(["STATE", "PUMA"])
     feature_cols = columns
 
     # All of this math and statistics heavy stuff was

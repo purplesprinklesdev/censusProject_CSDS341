@@ -61,6 +61,7 @@ HouseholdAgg AS (
 )
 
 SELECT
+    s.abbrev AS STATE,
     pa.PUMA,
 
     pa.avg_age,
@@ -106,4 +107,6 @@ LEFT JOIN HouseholdAgg ha
     AND pa.PUMA     = ha.PUMA
 LEFT JOIN PUMA pu
     ON  pa.PUMA     = pu.PUMA
-    AND pa.State = pu.State;
+    AND pa.State = pu.State
+JOIN State s
+    ON pa.State = s.State;
