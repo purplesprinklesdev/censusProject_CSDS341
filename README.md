@@ -17,7 +17,7 @@ A PUMA (Public Use Microdata Area) is the smallest geographic distinction in the
 
 You should now see a prompt that says `Enter Command:`. Try "countUnder 20", and check that you get a realistic value for your dataset.
 
-## List of SQL Commands
+## List of Valid Commands
 - avgAge: computes the average age of people in the dataset
 - bellwether puma: ranks bellwether PUMAs of the downloaded dataset
 - bellwether state: ranks bellwether states
