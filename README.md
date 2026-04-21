@@ -12,4 +12,4 @@ Lorem Ipsum
 
 - `python main.py`
 
-You should now see a prompt that says `Enter Command:`. Try "test". Make sure you get an error that mentions "NOTAREALTABLE" 
+You should now see a prompt that says `Enter Command:`. Try "countUnder20", and check that you get a realistic value for your dataset.
