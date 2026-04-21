@@ -84,11 +84,23 @@ def populateTables(state, api_key):
     print("Fetching Person Data... State " + str(state))
     person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, state, api_key)
     p_response = requests.get(person_url)
+
+    print(f"Person response status: {p_response.status_code}")
+    if p_response.status_code != 200:
+        print("Response failed, exiting early")
+        return
+
     p_data = p_response.json()
 
-    print("Fetching Household Data... State" + str(state))
+    print("Fetching Household Data... State " + str(state))
     household_url = buildCensusURL(CENSUS_HOUSEHOLD_VARIABLES, state, api_key)
     h_response = requests.get(household_url)
+
+    print(f"Household response status: {p_response.status_code}")
+    if h_response.status_code != 200:
+        print("Response failed, exiting early")
+        return
+
     h_data = h_response.json()
 
     print("Response received. Writing to database file...")
@@ -223,12 +235,11 @@ while True:
 
             if user_args[0].lower() == "all":
                 query = "SELECT State FROM State"
-                res = cur.execute(query)
+                res = cur.execute(query).fetchall()
                 for row in res:
                     populateTables(row[0], api_key)
             else:
                 query = "SELECT State FROM State WHERE abbrev=?"
-                print(user_args[0])
                 res = cur.execute(query, (user_args[0],))
                 for row in res:
                     populateTables(row[0], api_key)
