@@ -173,10 +173,15 @@ if first_run:
         conn.close()
         sys.exit(1)
 
-    cur.executescript(create_tables_query)
-    cur.executescript(insert_into_mapping)
-    cur.executescript(bellwether_puma)
-    # cur.executescript(bellwether_state)
+    try:
+        cur.executescript(create_tables_query)
+        cur.executescript(insert_into_mapping)
+        cur.executescript(bellwether_puma)
+        # cur.executescript(bellwether_state)
+    except sqlite3.OperationalError as e:
+        print(f"SQL error during setup: {e}")
+        conn.close()
+        sys.exit(1)
 
     print('Pull census data with "pull [STATE ABBREVIATION]" or "pull all".\n')
 
