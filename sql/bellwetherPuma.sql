@@ -4,6 +4,7 @@ WITH PersonAgg AS (
         p.State,
         p.PUMA,
 
+
         CAST(SUM(p.Age * p.Person_Weight) AS REAL)          / NULLIF(SUM(p.Person_Weight), 0) AS avg_age,
         CAST(SUM(p.Weeks_Worked * p.Person_Weight) AS REAL) / NULLIF(SUM(p.Person_Weight), 0) AS avg_weeks_worked,
 
@@ -63,6 +64,7 @@ HouseholdAgg AS (
 SELECT
     s.abbrev AS STATE,
     pa.PUMA,
+    pu.name AS Puma_Name,
 
     pa.avg_age,
     pa.avg_weeks_worked,

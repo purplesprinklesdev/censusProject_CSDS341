@@ -39,9 +39,10 @@ CREATE TABLE State (
     PRIMARY KEY (State)
 );
 CREATE TABLE PUMA (
-    PUMA INTEGER,
     State INTEGER,
-    PRIMARY KEY (PUMA)
+    PUMA INTEGER,
+    name TEXT,
+    PRIMARY KEY (State, PUMA)
 );
 CREATE TABLE Race (
     id INTEGER,
