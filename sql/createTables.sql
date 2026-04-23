@@ -1,10 +1,10 @@
 CREATE TABLE Person (
-    Serial_No TEXT,
+    Serial_No TEXT REFERENCES Household.Serial_No,
     Person_ID INTEGER,
-    PUMA INTEGER,
+    PUMA INTEGER REFERENCES PUMA.PUMA,
     Person_Weight INTEGER,
     Sex INTEGER,
-    Race INTEGER,
+    Race INTEGER REFERENCES RACE.id,
     Ethnicity INTEGER,
     Age INTEGER,
     Marital_Status INTEGER,
@@ -16,12 +16,12 @@ CREATE TABLE Person (
     Decade_of_Immigration INTEGER,
     Citizenship_Status INTEGER,
     Educational_Attainment INTEGER,
-    State INTEGER,
+    State INTEGER REFERENCES State.State,
     PRIMARY KEY (Serial_No, Person_ID)
 );
 CREATE TABLE Household (
     Serial_No TEXT,
-    PUMA INTEGER,
+    PUMA INTEGER REFERENCES PUMA.PUMA,
     Household_Weight INTEGER,
     Household_Income INTEGER,
     Property_Value INTEGER,
@@ -30,7 +30,7 @@ CREATE TABLE Household (
     Property_Taxes INTEGER,
     Tenure INTEGER,
     Workers_in_Family INTEGER,
-    State INTEGER,
+    State INTEGER REFERENCES State.State,
     PRIMARY KEY (Serial_No)
 );
 CREATE TABLE State (
@@ -39,7 +39,7 @@ CREATE TABLE State (
     PRIMARY KEY (State)
 );
 CREATE TABLE PUMA (
-    State INTEGER,
+    State INTEGER REFERENCES State.State,
     PUMA INTEGER,
     name TEXT,
     PRIMARY KEY (State, PUMA)
