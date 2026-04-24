@@ -3,6 +3,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
+from time import sleep
 
 import pandas as pd
 import requests
@@ -56,6 +57,37 @@ COMMAND_FILE_PATH = "commands.txt"
 SQL_DIR = "sql/"
 
 
+def helpMenu():
+    return """
+    Public Use Microdata Bellwether Finder
+    Created by Atri Banerjee, Mohit Nair, and Matthew Stall, 2026
+
+    - Command List -
+    q                               :   quits the program, or exits subcommand
+    quit                            :   quits the program
+
+    pull                            :   pulls data from US Census API
+        - all                       :   pull entire US dataset (many hours)
+        - [STATE_NUMBER]            :   pull a specific state (~15-20mins)
+        - [STATE_ABBREVIATION]      :   pull a specific state (~15-20mins)
+
+    bellwether                      :   run the bellwether ranking script
+        - puma                      :   rank pumas by distance to dataset mean
+        - state                     :   rank states by distance to US mean
+
+    help                            :   display this menu
+
+    eligibleVotersByPuma            :   lists the number and percentage of eligible
+                                        voters in each puma
+    avgAge                          :   computes the average age of people in the dataset
+    countUnder [AGE]                :   counts all people under a given age (e.g. "countUnder 20")
+    multilingualWorkersNoHIByRace   :   finds multilingual workers with no health insurance
+    overcrowdedHouseholds           :   finds crowded households based on household income, the number of dependents, etc.
+    pctInsured                      :   outputs the percentage of people with health insurance
+    topPumas                        :   determines the most populated PUMAs
+    """
+
+
 def buildCensusURL(vars, state, apikey):
     url = CENSUS_BASE_URL + VINTAGE + SURVEY + "?get="
     for var in vars:
@@ -69,6 +101,7 @@ def buildCensusURL(vars, state, apikey):
 
 
 def populateTables(state, api_key):
+    print("This may take a while...")
     try:
         insert_into_person = Path(SQL_DIR + "insertIntoPerson.sql").read_text(
             encoding="utf-8"
@@ -81,42 +114,61 @@ def populateTables(state, api_key):
         conn.close()
         sys.exit(1)
 
-    print("Fetching Person Data... State " + str(state))
-    person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, state, api_key)
-    p_response = requests.get(person_url)
+    while True:
+        print("Fetching Person Data... State " + str(state))
+        person_url = buildCensusURL(CENSUS_PERSON_VARIABLES, state, api_key)
+        try:
+            p_response = requests.get(person_url)
 
-    print(f"Person response status: {p_response.status_code}")
-    if p_response.status_code != 200:
-        print("Response failed, exiting early")
-        return
+            if p_response.status_code == 200:
+                print("Response recieved successfully.")
+                break
+            print(
+                f"Response failed with code {p_response.status_code}, retrying in 5 minutes..."
+            )
+        except ConnectionError:
+            print("Response timed out, retrying in 5 minutes...")
+        sleep(5 * 60)
 
     p_data = p_response.json()
 
-    print("Fetching Household Data... State " + str(state))
-    household_url = buildCensusURL(CENSUS_HOUSEHOLD_VARIABLES, state, api_key)
-    h_response = requests.get(household_url)
+    while True:
+        print("Fetching Household Data... State " + str(state))
+        household_url = buildCensusURL(CENSUS_HOUSEHOLD_VARIABLES, state, api_key)
+        try:
+            h_response = requests.get(household_url)
 
-    print(f"Household response status: {p_response.status_code}")
-    if h_response.status_code != 200:
-        print("Response failed, exiting early")
-        return
+            if h_response.status_code == 200:
+                print("Response recieved successfully.")
+                break
+            print(
+                f"Response failed with code {h_response.status_code}, retrying in 5 minutes..."
+            )
+        except ConnectionError:
+            print("Response timed out, retrying in 5 minutes...")
+        sleep(5 * 60)
 
     h_data = h_response.json()
 
-    print("Response received. Writing to database file...")
+    print("Writing results from API to database file...")
 
     # remove headers
     p_data.pop(0)
     h_data.pop(0)
 
-    cur.executemany(insert_into_person, p_data)
-    cur.executemany(insert_into_household, h_data)
+    try:
+        cur.executemany(insert_into_person, p_data)
+        cur.executemany(insert_into_household, h_data)
+    except sqlite3.Error as er:
+        print(
+            f"Database error recieved when inserting data on state {state}. Check the error, and consider retrying."
+        )
+        print(f"Error received from SQLite: {er}")
 
-    print("Successfully wrote to database. State " + str(state))
+    print(f"Successfully wrote to database. State {state}")
 
 
 def bellwetherPumaQuery(cur):
-    # change to the materialized view table
     raw_wavgs = cur.execute("SELECT * FROM PumaProfile")
     raw_wavgs_rows = raw_wavgs.fetchall()
     columns = [d[0] for d in raw_wavgs.description]
@@ -189,14 +241,14 @@ if first_run:
         cur.executescript(insert_into_mapping)
         cur.executescript(bellwether_puma)
         # cur.executescript(bellwether_state)
-    except sqlite3.OperationalError as e:
+    except sqlite3.Error as e:
         print(f"SQL error during setup: {e}")
         conn.close()
         sys.exit(1)
 
-    print('Tables created. Populate tables using the pull command as follows: ')
+    print("Tables created. Populate tables using the pull command as follows: ")
     print('Pull census data with "pull [STATE ABBREVIATION]" or "pull all".')
-    print('e.g. pull OH\n')
+    print('e.g. "pull OH"\n')
 
 # Main Execution Loop
 print("Public Use Microdata Bellwether Finder")
@@ -215,16 +267,34 @@ while True:
         case "quit":
             conn.close()
             break
+        case "help":
+            print(helpMenu())
+            continue
         case "bellwether":
-            if user_args[0].lower() == "puma":
-                bellwetherPumaQuery(cur)
-            # else if uArgs[0].lower() == "state":
-            # bellwetherPumaQuery(cur)
-            else:
-                print('Invalid subcommand. Options are "puma" or "state"')
+            while True:
+                if user_args[0].lower() == "puma":
+                    try:
+                        bellwetherPumaQuery(cur)
+                    except sqlite3.Error as er:
+                        print(
+                            f"A SQL error occured during bellwether calculation.\nError: {er}"
+                        )
+                    break
+                # else if uArgs[0].lower() == "state":
+                # bellwetherPumaQuery(cur)
+                else:
+                    print(
+                        'bellwether - Subcommand options: "puma", "state". See "help" for more info. "q" to exit this submenu'
+                    )
+                    subcommand_args = input("Enter Subcommand: ").split()
+                    if subcommand_args[0] == "q":
+                        break
+                    if subcommand_args[0] == "help":
+                        print(helpMenu())
+                        continue
+                    user_args = subcommand_args
             continue
         case "pull":
-            print("This may take a while...")
             load_dotenv()
             api_key = os.getenv("CENSUS_API_KEY")
 
@@ -232,35 +302,66 @@ while True:
                 print("API Key missing!")
                 conn.close()
                 sys.exit(1)
-
-            if user_args[0].lower() == "all":
-                query = "SELECT State FROM State"
-                res = cur.execute(query).fetchall()
-                for row in res:
-                    populateTables(row[0], api_key)
-            else:
-                query = "SELECT State FROM State WHERE abbrev=?"
-                res = cur.execute(query, (user_args[0],))
-                for row in res:
-                    populateTables(row[0], api_key)
+            while True:
+                if user_args[0].lower() == "all":
+                    query = "SELECT State FROM State"
+                    res = cur.execute(query).fetchall()
+                    for row in res:
+                        populateTables(row[0], api_key)
+                    break
+                elif user_args[0].isnumeric():
+                    populateTables(user_args[0], api_key)
+                    break
+                elif len(user_args[0]) == 2:
+                    query = "SELECT State FROM State WHERE abbrev=?"
+                    res = cur.execute(query, (user_args[0],))
+                    for row in res:
+                        populateTables(row[0], api_key)
+                    break
+                else:
+                    print(
+                        'pull - Subcommand options: "all", "[STATE_NUMBER]", "[STATE_ABBREVIATION]". See "help" for more info. "q" to exit this submenu'
+                    )
+                    subcommand_args = input("Enter Subcommand: ").split()
+                    if subcommand_args[0] == "q":
+                        break
+                    if subcommand_args[0] == "help":
+                        print(helpMenu())
+                        continue
+                    user_args = subcommand_args
             continue
 
     try:
         query = Path(SQL_DIR + user_command + ".sql").read_text(encoding="utf-8")
     except FileNotFoundError:
-        print("Invalid command: " + user_command)
+        print(f'Invalid command: {user_command} See "help" for a full list.')
         continue
 
+    # TODO: subcommand stuff for arbitrary SQL command
+
+    # trim off extra args not supported by the query
     user_args = user_args[: query.count("?")]
 
     # Run SQL
-    if len(user_args) < 1:
-        result = cur.execute(query)
-    else:
-        result = cur.execute(query, user_args)
+    try:
+        if len(user_args) < 1:
+            result = cur.execute(query)
+        else:
+            result = cur.execute(query, user_args)
 
-    for row in result:
-        string = ""
-        for element in row:
-            string += str(element) + ", "
-        print(string)
+        columns = [d[0] for d in result.description]
+
+        headers = ""
+        for col in columns:
+            headers += str(col) + ", "
+        headers = headers[: len(headers) - 1]
+        print(headers)
+
+        for row in result:
+            string = ""
+            for element in row:
+                string += str(element) + ", "
+            string = string[: len(string) - 1]
+            print(string)
+    except sqlite3.Error as er:
+        print(f"An error occured in SQLite when running the command.\n Error: {er}")
