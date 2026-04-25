@@ -61,10 +61,12 @@ SQL_DIR = "sql/"
 
 def helpMenu():
     return """
-    Public Use Microdata Bellwether Finder
+    ------------ Public Use Microdata Bellwether Finder ------------
     Created by Atri Banerjee, Mohit Nair, and Matthew Stall, 2026
 
-    - Command List -
+    Consult README.md for more general information about the project
+
+    ------------              Command List              ------------
     q                               :   quits the program, or exits subcommand
     quit                            :   quits the program
 
@@ -77,6 +79,15 @@ def helpMenu():
         - puma                      :   rank pumas by distance to dataset mean
         - state                     :   rank states by distance to US mean
 
+    rowsIn [TABLE]                  :   counts the number of rows in [TABLE]. Options:
+                                    :   Person, Household, State, PUMA, Race
+                                    :   NOTE: for Person and Household, this does not
+                                    :   correspond to the number of people or households,
+                                    :   use "peopleInData" or "householdsInData" instead
+
+    datapreview [TABLE] [NUMBER]    :   shows the top [NUMBER] of rows in [TABLE]. If
+                                    :   number is not supplied then 15 will be used
+
     help                            :   display this menu
 
     eligibleVotersByPuma            :   lists the number and percentage of eligible
@@ -84,9 +95,16 @@ def helpMenu():
     avgAge                          :   computes the average age of people in the dataset
     countUnder [AGE]                :   counts all people under a given age (e.g. "countUnder 20")
     multilingualWorkersNoHIByRace   :   finds multilingual workers with no health insurance
-    overcrowdedHouseholds           :   finds crowded households based on household income, the number of dependents, etc.
+    overcrowdedHouseholds           :   finds crowded households based on household income,
+                                    :   the number of dependents, etc.
     pctInsured                      :   outputs the percentage of people with health insurance
     topPumas                        :   determines the most populated PUMAs
+    peopleInData                    :   counts the number of people in the dataset
+    peopleInState [STATE]           :   counts the number of people in the state (abbreviation)
+    peopleInPuma [STATE] [PUMA]     :   counts the number of people in the puma
+    householdsInData                :   counts the number of households in the dataset
+    householdsInState [STATE]       :   counts the number of households in the state (abbreviation)
+    householdsInPuma [STATE] [PUMA] :   counts the number of households in the puma
     """
 
 
@@ -102,9 +120,21 @@ def buildCensusURL(vars, state, apikey):
     return url
 
 
-def trimInput(data, redundant_indices):
-    for row in data:
-        yield tuple(val for i, val in enumerate(row) if i not in redundant_indices)
+def printQueryResult(result):
+    columns = [d[0] for d in result.description]
+
+    headers = ""
+    for col in columns:
+        headers += str(col) + ", "
+    headers = headers[: len(headers) - 2]
+    print(headers)
+
+    for row in result:
+        string = ""
+        for element in row:
+            string += str(element) + ", "
+        string = string[: len(string) - 2]
+        print(string)
 
 
 def populateTables(state, api_key):
@@ -118,8 +148,10 @@ def populateTables(state, api_key):
         )
     except FileNotFoundError:
         print("Missing Critical SQL files. Please redownload the repo.")
-        conn.close()
         sys.exit(1)
+
+    conn = sqlite3.connect(DB_FILE, isolation_level="DEFERRED")
+    cur = conn.cursor()
 
     while True:
         print("Fetching Person Data... State " + str(state))
@@ -157,23 +189,53 @@ def populateTables(state, api_key):
 
     h_data = h_response.json()
 
-    print("Writing results from API to database file...")
+    print("Formatting data...")
 
     # Remove headers
     p_data.pop(0)
     h_data.pop(0)
 
-    try:
-        cur.executemany(insert_into_person, trimInput(p_data, {p_data[0].index("P")}))
-        cur.executemany(
-            insert_into_household, trimInput(h_data, {h_data[0].index("H")})
-        )
-    except sqlite3.Error as er:
-        print(
-            f"Database error recieved when inserting data on state {state}. Check the error, and consider retrying."
-        )
-        print(f"Error received from SQLite: {er}")
+    p_redundant_index = p_data[0].index("P")
+    h_redundant_index = h_data[0].index("H")
 
+    for row_i in range(0, len(p_data)):
+        row = p_data[row_i]
+        if row[3] == 0:
+            p_data.pop(row_i)
+            continue
+        row.pop(p_redundant_index)
+    for row_i in range(0, len(h_data)):
+        row = h_data[row_i]
+        if row[3] == 0:
+            h_data.pop(row_i)
+            continue
+        row.pop(h_redundant_index)
+
+    try:
+        print("Writing Data to Person Table...")
+        cur.execute("BEGIN")
+        cur.executemany(insert_into_person, p_data)
+        conn.commit()
+    except sqlite3.Error as er:
+        conn.rollback()
+        print(
+            f"""Database error recieved when inserting Person data on state {state}. Check the error, and consider retrying.
+            Error received from SQLite: {er}"""
+        )
+
+    try:
+        print("Writing Data to Household Table...")
+        cur.execute("BEGIN")
+        cur.executemany(insert_into_household, h_data)
+        conn.commit()
+    except sqlite3.Error as er:
+        conn.rollback()
+        print(
+            f"""Database error recieved when inserting Household data on state {state}. Check the error, and consider retrying.
+            Error received from SQLite: {er}"""
+        )
+
+    conn.close()
     print(f"Successfully wrote to database. State {state}")
 
 
@@ -222,7 +284,7 @@ def bellwetherPumaQuery(cur):
 # --SETUP--
 first_run = not os.path.isfile(DB_FILE)
 
-conn = sqlite3.connect(DB_FILE, autocommit=True)
+conn = sqlite3.connect(DB_FILE, isolation_level=None)
 cur = conn.cursor()
 
 
@@ -274,9 +336,12 @@ if first_run:
 print("Public Use Microdata Bellwether Finder")
 while True:
     # Read user input, process args
+    print("")
     user_in = input("Enter Command: ")
 
     user_args = user_in.split()
+    if len(user_args) < 1:
+        continue
     user_command = user_args[0]
     user_args.pop(0)
 
@@ -322,19 +387,23 @@ while True:
                 print("API Key missing!")
                 conn.close()
                 sys.exit(1)
+
             while True:
                 if user_args[0].lower() == "all":
                     query = "SELECT State FROM State"
                     res = cur.execute(query).fetchall()
+                    conn.close()
                     for row in res:
                         populateTables(row[0], api_key)
                     break
                 elif user_args[0].isnumeric():
+                    conn.close()
                     populateTables(user_args[0], api_key)
                     break
                 elif len(user_args[0]) == 2:
                     query = "SELECT State FROM State WHERE abbrev=?"
-                    res = cur.execute(query, (user_args[0],))
+                    res = cur.execute(query, (user_args[0],)).fetchall()
+                    conn.close()
                     for row in res:
                         populateTables(row[0], api_key)
                     break
@@ -349,6 +418,103 @@ while True:
                         print(helpMenu())
                         continue
                     user_args = subcommand_args
+            conn = sqlite3.connect(DB_FILE, isolation_level=None)
+            cur = conn.cursor()
+            continue
+        case "rowsin":
+            query = "SELECT COUNT(*) AS Rows FROM"
+            while True:
+                if len(user_args) < 1:
+                    print(
+                        'rowsIn - Subcommand options: "[TABLE]". See "help" for more info. "q" to exit this submenu'
+                    )
+                    subcommand_args = input("Enter Subcommand: ").split()
+                    if subcommand_args[0] == "q":
+                        break
+                    if subcommand_args[0] == "help":
+                        print(helpMenu())
+                        continue
+                    user_args = subcommand_args
+                    continue
+                match user_args[0].lower():
+                    case "person":
+                        query += " Person;"
+                        break
+                    case "household":
+                        query += " Household;"
+                        break
+                    case "state":
+                        query += " State;"
+                        break
+                    case "puma":
+                        query += " PUMA;"
+                        break
+                    case "race":
+                        query += " Race;"
+                        break
+                    case _:
+                        print(
+                            'rowsIn - Subcommand options: "[TABLE]". See "help" for more info. "q" to exit this submenu'
+                        )
+                        subcommand_args = input("Enter Subcommand: ").split()
+                        if subcommand_args[0] == "q":
+                            break
+                        if subcommand_args[0] == "help":
+                            print(helpMenu())
+                            continue
+                        user_args = subcommand_args
+                        continue
+            printQueryResult(cur.execute(query))
+            continue
+        case "datapreview":
+            query = "SELECT * FROM "
+            while True:
+                if len(user_args) < 1:
+                    print(
+                        'dataPreview - Subcommand options: "[TABLE]", [NUMBER]. Number is optional. See "help" for more info. "q" to exit this submenu'
+                    )
+                    subcommand_args = input("Enter Subcommand: ").split()
+                    if subcommand_args[0] == "q":
+                        break
+                    if subcommand_args[0] == "help":
+                        print(helpMenu())
+                        continue
+                    user_args = subcommand_args
+                    continue
+                match user_args[0].lower():
+                    case "person":
+                        query += "Person"
+                        break
+                    case "household":
+                        query += "Household"
+                        break
+                    case "state":
+                        query += "State"
+                        break
+                    case "puma":
+                        query += "PUMA"
+                        break
+                    case "race":
+                        query += "Race"
+                        break
+                    case _:
+                        print(
+                            'dataPreview - Subcommand options: "[TABLE]", [NUMBER]. Number is optional. See "help" for more info. "q" to exit this submenu'
+                        )
+                        subcommand_args = input("Enter Subcommand: ").split()
+                        if subcommand_args[0] == "q":
+                            break
+                        if subcommand_args[0] == "help":
+                            print(helpMenu())
+                            continue
+                        user_args = subcommand_args
+                        continue
+            if len(user_args) < 2 or not user_args[1].isnumeric():
+                query += " LIMIT 15;"
+                printQueryResult(cur.execute(query))
+            else:
+                query += " LIMIT ?;"
+                printQueryResult(cur.execute(query, (user_args[1],)))
             continue
 
     try:
@@ -368,20 +534,6 @@ while True:
             result = cur.execute(query)
         else:
             result = cur.execute(query, user_args)
-
-        columns = [d[0] for d in result.description]
-
-        headers = ""
-        for col in columns:
-            headers += str(col) + ", "
-        headers = headers[: len(headers) - 1]
-        print(headers)
-
-        for row in result:
-            string = ""
-            for element in row:
-                string += str(element) + ", "
-            string = string[: len(string) - 1]
-            print(string)
+        printQueryResult(result)
     except sqlite3.Error as er:
         print(f"An error occured in SQLite when running the command.\n Error: {er}")

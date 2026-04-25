@@ -1,4 +1,4 @@
-SELECT SUM(Person_Weight)
+SELECT SUM(Person_Weight) AS People
 FROM Person
 WHERE Age < ?;
 
