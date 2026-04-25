@@ -104,11 +104,11 @@ SELECT
     ha.pct_three_or_more_workers
 
 FROM PersonAgg pa
-LEFT JOIN HouseholdAgg ha
+JOIN HouseholdAgg ha
     ON  pa.State = ha.State
-    AND pa.PUMA     = ha.PUMA
-LEFT JOIN PUMA pu
-    ON  pa.PUMA     = pu.PUMA
+    AND pa.PUMA  = ha.PUMA
+JOIN PUMA pu
+    ON  pa.PUMA  = pu.PUMA
     AND pa.State = pu.State
 JOIN State s
     ON pa.State = s.State;

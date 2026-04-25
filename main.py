@@ -38,6 +38,7 @@ CENSUS_PERSON_VARIABLES = [
     "ENG",
     "DECADE",
     "CIT",
+    "&RT=P",
 ]
 CENSUS_HOUSEHOLD_VARIABLES = [
     "SERIALNO",
@@ -50,6 +51,7 @@ CENSUS_HOUSEHOLD_VARIABLES = [
     "TAXAMT",
     "TEN",
     "WIF",
+    "&RT=H",
 ]
 
 DB_FILE = "db.db"
@@ -98,6 +100,11 @@ def buildCensusURL(vars, state, apikey):
     url += "&for=state:" + str(state)
     url += "&key=" + apikey
     return url
+
+
+def trimInput(data, redundant_indices):
+    for row in data:
+        yield tuple(val for i, val in enumerate(row) if i not in redundant_indices)
 
 
 def populateTables(state, api_key):
@@ -152,13 +159,11 @@ def populateTables(state, api_key):
 
     print("Writing results from API to database file...")
 
-    # remove headers
-    p_data.pop(0)
-    h_data.pop(0)
-
     try:
-        cur.executemany(insert_into_person, p_data)
-        cur.executemany(insert_into_household, h_data)
+        cur.executemany(insert_into_person, trimInput(p_data, {0, p_data.index("P")}))
+        cur.executemany(
+            insert_into_household, trimInput(h_data, {0, h_data.index("H")})
+        )
     except sqlite3.Error as er:
         print(
             f"Database error recieved when inserting data on state {state}. Check the error, and consider retrying."
@@ -185,11 +190,14 @@ def bellwetherPumaQuery(cur):
 
     X = puma_stats[feature_cols].values
 
-    national_vec = puma_stats[feature_cols].mean().values
+    dataset_avgs = cur.execute("SELECT * FROM DatasetAvg").fetchall()
+    col_names = [d[0] for d in cur.description]
+    national_df = pd.DataFrame(dataset_avgs, columns=col_names)
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    national_scaled = scaler.transform(national_vec.reshape(1, -1))
+
+    national_scaled = scaler.transform(national_df[feature_cols].values)
 
     # LedoitWolf handles near-singular matrices via shrinkage
     lw_cov = LedoitWolf().fit(X_scaled)
@@ -217,7 +225,7 @@ cur = conn.cursor()
 if first_run:
     print("Database file does not exist yet. Creating tables...")
 
-    # --Create Tables--
+    # --Create Tables and Views--
     try:
         create_tables_query = Path(SQL_DIR + "createTables.sql").read_text(
             encoding="utf-8"
@@ -225,10 +233,16 @@ if first_run:
         insert_into_mapping = Path(SQL_DIR + "insertIntoMapping.sql").read_text(
             encoding="utf-8"
         )
-        bellwether_puma = Path(SQL_DIR + "bellwetherPuma.sql").read_text(
+        insert_into_puma = Path(SQL_DIR + "insertIntoPuma.sql").read_text(
             encoding="utf-8"
         )
-        bellwether_state = Path(SQL_DIR + "bellwetherPuma.sql").read_text(
+        bellwether_puma_view = Path(SQL_DIR + "bellwetherPuma.sql").read_text(
+            encoding="utf-8"
+        )
+        """bellwether_state = Path(SQL_DIR + "bellwetherPuma.sql").read_text(
+            encoding="utf-8"
+        )"""
+        national_avg_view = Path(SQL_DIR + "nationalAvg.sql").read_text(
             encoding="utf-8"
         )
     except FileNotFoundError:
@@ -239,8 +253,10 @@ if first_run:
     try:
         cur.executescript(create_tables_query)
         cur.executescript(insert_into_mapping)
-        cur.executescript(bellwether_puma)
+        cur.executescript(insert_into_puma)
+        cur.executescript(bellwether_puma_view)
         # cur.executescript(bellwether_state)
+        cur.executescript(national_avg_view)
     except sqlite3.Error as e:
         print(f"SQL error during setup: {e}")
         conn.close()
