@@ -71,9 +71,9 @@ def helpMenu():
     quit                            :   quits the program
 
     pull                            :   pulls data from US Census API
-        - all                       :   pull entire US dataset (many hours)
-        - [STATE_NUMBER]            :   pull a specific state (~15-20mins)
-        - [STATE_ABBREVIATION]      :   pull a specific state (~15-20mins)
+        - all                       :   pull entire US dataset (~50mins)
+        - [STATE_NUMBER]            :   pull a specific state (1-2mins)
+        - [STATE_ABBREVIATION]      :   pull a specific state (1-2mins)
 
     bellwether                      :   run the bellwether ranking script
         - puma                      :   rank pumas by distance to dataset mean
@@ -138,7 +138,6 @@ def printQueryResult(result):
 
 
 def populateTables(state, api_key):
-    print("This may take a while...")
     try:
         insert_into_person = Path(SQL_DIR + "insertIntoPerson.sql").read_text(
             encoding="utf-8"
@@ -162,6 +161,14 @@ def populateTables(state, api_key):
             if p_response.status_code == 200:
                 print("Response recieved successfully.")
                 break
+            elif p_response.status_code == 204:
+                print(
+                    f"Response code {p_response.status_code} received, state contains no records."
+                )
+                return
+            elif p_response.status_code >= 200 and p_response.status_code < 300:
+                print(f"Response code {p_response.status_code} received.")
+                break
             print(
                 f"Response failed with code {p_response.status_code}, retrying in 5 minutes..."
             )
@@ -179,6 +186,14 @@ def populateTables(state, api_key):
 
             if h_response.status_code == 200:
                 print("Response recieved successfully.")
+                break
+            elif h_response.status_code == 204:
+                print(
+                    f"Response code {h_response.status_code} received, state contains no records."
+                )
+                return
+            elif h_response.status_code >= 200 and h_response.status_code < 300:
+                print(f"Response code {h_response.status_code} received.")
                 break
             print(
                 f"Response failed with code {h_response.status_code}, retrying in 5 minutes..."
@@ -256,7 +271,7 @@ def bellwetherPumaQuery(cur):
 
     X = puma_stats[feature_cols].values
 
-    dataset_avgs = cur.execute("SELECT * FROM DatasetAvg").fetchall()
+    dataset_avgs = cur.execute("SELECT * FROM NationalAvg").fetchall()
     col_names = [d[0] for d in cur.description]
     national_df = pd.DataFrame(dataset_avgs, columns=col_names)
 
@@ -393,6 +408,7 @@ while True:
                     query = "SELECT State FROM State"
                     res = cur.execute(query).fetchall()
                     conn.close()
+                    print("This may take a while...")
                     for row in res:
                         populateTables(row[0], api_key)
                     break
