@@ -159,10 +159,14 @@ def populateTables(state, api_key):
 
     print("Writing results from API to database file...")
 
+    # Remove headers
+    p_data.pop(0)
+    h_data.pop(0)
+
     try:
-        cur.executemany(insert_into_person, trimInput(p_data, {0, p_data.index("P")}))
+        cur.executemany(insert_into_person, trimInput(p_data, {p_data[0].index("P")}))
         cur.executemany(
-            insert_into_household, trimInput(h_data, {0, h_data.index("H")})
+            insert_into_household, trimInput(h_data, {h_data[0].index("H")})
         )
     except sqlite3.Error as er:
         print(
