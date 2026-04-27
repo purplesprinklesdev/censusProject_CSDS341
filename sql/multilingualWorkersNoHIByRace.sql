@@ -7,7 +7,7 @@ FROM Person p
 JOIN Race r ON p.Race = r.id
 WHERE
     p.Multilingual        = 1
-    AND p.Health_Insurance    = 0
+    AND p.Health_Insurance    = 2
     AND p.Employment_Status   = 1
     AND p.Age BETWEEN 18 AND 64
 GROUP BY r.name
