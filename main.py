@@ -2,6 +2,7 @@
 import os
 import sqlite3
 import sys
+from configparser import DEFAULTSECT
 from pathlib import Path
 from time import sleep
 
@@ -17,7 +18,7 @@ from sklearn.covariance import LedoitWolf
 from sklearn.preprocessing import StandardScaler
 
 CENSUS_BASE_URL = "https://api.census.gov/data/"
-VINTAGE = "2024"
+DEFAULT_VINTAGE = "2024"
 SURVEY = "/acs/acs5/pums"
 
 CENSUS_PERSON_VARIABLES = [
@@ -110,7 +111,7 @@ def helpMenu():
 
 
 def buildCensusURL(vars, state, apikey):
-    url = CENSUS_BASE_URL + VINTAGE + SURVEY + "?get="
+    url = CENSUS_BASE_URL + vintage + SURVEY + "?get="
     for var in vars:
         if var[0] == "&":
             url = url[:-1]
@@ -303,6 +304,7 @@ first_run = not os.path.isfile(DB_FILE)
 conn = sqlite3.connect(DB_FILE, isolation_level=None)
 cur = conn.cursor()
 
+vintage = DEFAULT_VINTAGE
 
 if first_run:
     print("Database file does not exist yet. Creating tables...")
@@ -401,6 +403,10 @@ while True:
         case "pull":
             load_dotenv()
             api_key = os.getenv("CENSUS_API_KEY")
+            vintage = os.getenv("VINTAGE")
+
+            if vintage is None:
+                vintage = DEFAULT_VINTAGE
 
             if api_key is None:
                 print("API Key missing!")
