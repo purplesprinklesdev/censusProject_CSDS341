@@ -1,6 +1,6 @@
 SELECT
-    s.abbrev                                                                AS State_Abbrev,
-    p.PUMA                                                                   AS PUMA,   
+    s.abbrev                                                                AS State,
+    pu.name                                                                 AS PUMA,
     SUM(p.Person_Weight)                                                    AS Total_Weighted_Population,
     SUM(CASE WHEN p.Citizenship_Status IN (1, 2, 3)
              AND p.Age >= 18
@@ -13,4 +13,5 @@ FROM Person p
 JOIN State s ON p.State = s.State
 LEFT JOIN PUMA pu ON p.PUMA = pu.PUMA AND p.State = pu.State
 GROUP BY s.abbrev, p.PUMA, pu.name
-ORDER BY Pct_Eligible_Voters DESC;
+ORDER BY Pct_Eligible_Voters DESC
+LIMIT 50;

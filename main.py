@@ -79,6 +79,7 @@ def helpMenu():
     bellwether                      :   run the bellwether ranking script
         - puma                      :   rank pumas by distance to dataset mean
         - state                     :   rank states by distance to US mean
+        - pumaInState [STATE]       :   rank pumas by distance to [STATE] mean
 
     rowsIn [TABLE]                  :   counts the number of rows in [TABLE]. Options:
                                     :   Person, Household, State, PUMA, Race
@@ -86,7 +87,7 @@ def helpMenu():
                                     :   correspond to the number of people or households,
                                     :   use "peopleInData" or "householdsInData" instead
 
-    datapreview [TABLE] [NUMBER]    :   shows the top [NUMBER] of rows in [TABLE]. If
+    datapreview [TABLE] [NUMBER]    :   shows the first [NUMBER] rows in [TABLE]. If
                                     :   number is not supplied then 15 will be used
 
     help                            :   display this menu
@@ -338,6 +339,53 @@ def bellwetherStateQuery(cur):
     print(bellwether_ranking.head(10))
 
 
+def bellwetherPumaByStateQuery(cur, state):
+    raw_wavgs = cur.execute("SELECT * FROM PumaProfile WHERE STATE = ?", (state,))
+    raw_wavgs_rows = raw_wavgs.fetchall()
+    columns = [d[0] for d in raw_wavgs.description]
+
+    puma_stats = pd.DataFrame(raw_wavgs_rows, columns=columns)
+    columns.remove("STATE")
+    columns.remove("PUMA")
+    columns.remove("Puma_Name")
+    puma_stats = puma_stats.set_index(["STATE", "PUMA", "Puma_Name"])
+    feature_cols = columns
+
+    # All of this math and statistics heavy stuff was
+    # handled mostly by Claude Sonnet 4.6
+
+    X = puma_stats[feature_cols].values
+
+    state_avg_query = Path(SQL_DIR + "stateAvg.sql").read_text(encoding="utf-8")
+    state_no = cur.execute(
+        "SELECT State FROM State WHERE abbrev = ?", (state,)
+    ).fetchall()[0][0]
+    state_avg_input = [state_no, state_no]
+    dataset_avgs = cur.execute(state_avg_query, state_avg_input).fetchall()
+    col_names = [d[0] for d in cur.description]
+    national_df = pd.DataFrame(dataset_avgs, columns=col_names)
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    national_scaled = scaler.transform(national_df[feature_cols].values)
+
+    # LedoitWolf handles near-singular matrices via shrinkage
+    lw_cov = LedoitWolf().fit(X_scaled)
+    inv_cov = lw_cov.get_precision()
+
+    # Compute distances
+    distances = [mahalanobis(row, national_scaled[0], inv_cov) for row in X_scaled]
+
+    puma_stats["mahal_dist"] = distances
+    puma_stats["p_value"] = 1 - chi2.cdf(
+        puma_stats["mahal_dist"] ** 2, df=len(feature_cols)
+    )
+
+    bellwether_ranking = puma_stats[["mahal_dist", "p_value"]].sort_values("mahal_dist")
+    print(bellwether_ranking.head(10))
+
+
 # --SETUP--
 first_run = not os.path.isfile(DB_FILE)
 
@@ -431,9 +479,17 @@ while True:
                             f"A SQL error occured during bellwether calculation.\nError: {er}"
                         )
                     break
+                elif len(user_args) > 1 and user_args[0].lower() == "pumainstate":
+                    try:
+                        bellwetherPumaByStateQuery(cur, user_args[1].upper())
+                    except sqlite3.Error as er:
+                        print(
+                            f"A SQL error occured during bellwether calculation.\nError: {er}"
+                        )
+                    break
                 else:
                     print(
-                        'bellwether - Subcommand options: "puma", "state". See "help" for more info. "q" to exit this submenu'
+                        'bellwether - Subcommand options: "puma", "state", "pumaInState [STATE]". See "help" for more info. "q" to exit this submenu'
                     )
                     subcommand_args = input("\nEnter Subcommand: ").split()
                     if (
@@ -474,7 +530,7 @@ while True:
                     break
                 elif len(user_args[0]) == 2:
                     query = "SELECT State FROM State WHERE abbrev=?"
-                    res = cur.execute(query, (user_args[0],)).fetchall()
+                    res = cur.execute(query, (user_args[0].upper(),)).fetchall()
                     conn.close()
                     for row in res:
                         populateTables(row[0], api_key)
@@ -608,6 +664,7 @@ while True:
         "insertIntoMapping",
         "insertIntoPuma",
         "nationalAvg",
+        "stateAvg",
     ]
     if any(user_command in s for s in command_blocklist):
         print(f'Invalid command: {user_command} See "help" for a full list.')

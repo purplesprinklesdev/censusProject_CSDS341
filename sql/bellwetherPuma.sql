@@ -93,12 +93,12 @@ SELECT
     pa.pct_citizen,
 
     ha.avg_household_income,
-    ha.avg_property_value,
-    ha.pct_children_present,
     ha.avg_gross_rent,
     ha.avg_property_taxes,
+    ha.avg_property_value,
     ha.pct_owner_occupied,
     ha.pct_renter_occupied,
+    ha.pct_children_present,
     ha.pct_one_worker,
     ha.pct_two_workers,
     ha.pct_three_or_more_workers
