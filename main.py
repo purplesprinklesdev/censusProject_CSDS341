@@ -105,6 +105,7 @@ def helpMenu():
     householdsInData                :   counts the number of households in the dataset
     householdsInState [STATE]       :   counts the number of households in the state (abbreviation)
     householdsInPuma [STATE] [PUMA] :   counts the number of households in the puma
+    pumasInState [STATE]            :   displays all PUMAs and their human-readable names in [STATE]
     """
 
 
