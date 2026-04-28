@@ -372,7 +372,7 @@ while True:
             continue
         case "bellwether":
             while True:
-                if user_args[0].lower() == "puma":
+                if len(user_args) > 0 and user_args[0].lower() == "puma":
                     try:
                         bellwetherPumaQuery(cur)
                     except sqlite3.Error as er:
@@ -386,10 +386,13 @@ while True:
                     print(
                         'bellwether - Subcommand options: "puma", "state". See "help" for more info. "q" to exit this submenu'
                     )
-                    subcommand_args = input("Enter Subcommand: ").split()
-                    if subcommand_args[0] == "q":
+                    subcommand_args = input("\nEnter Subcommand: ").split()
+                    if (
+                        subcommand_args[0].lower() == "q"
+                        or subcommand_args[0].lower() == "quit"
+                    ):
                         break
-                    if subcommand_args[0] == "help":
+                    if subcommand_args[0].lower() == "help":
                         print(helpMenu())
                         continue
                     user_args = subcommand_args
@@ -404,7 +407,7 @@ while True:
                 sys.exit(1)
 
             while True:
-                if user_args[0].lower() == "all":
+                if len(user_args) > 0 and user_args[0].lower() == "all":
                     query = "SELECT State FROM State"
                     res = cur.execute(query).fetchall()
                     conn.close()
@@ -412,7 +415,7 @@ while True:
                     for row in res:
                         populateTables(row[0], api_key)
                     break
-                elif user_args[0].isnumeric():
+                elif len(user_args) > 0 and user_args[0].isnumeric():
                     conn.close()
                     populateTables(user_args[0], api_key)
                     break
@@ -427,10 +430,13 @@ while True:
                     print(
                         'pull - Subcommand options: "all", "[STATE_NUMBER]", "[STATE_ABBREVIATION]". See "help" for more info. "q" to exit this submenu'
                     )
-                    subcommand_args = input("Enter Subcommand: ").split()
-                    if subcommand_args[0] == "q":
+                    subcommand_args = input("\nEnter Subcommand: ").split()
+                    if (
+                        subcommand_args[0].lower() == "q"
+                        or subcommand_args[0].lower() == "quit"
+                    ):
                         break
-                    if subcommand_args[0] == "help":
+                    if subcommand_args[0].lower() == "help":
                         print(helpMenu())
                         continue
                     user_args = subcommand_args
@@ -444,10 +450,13 @@ while True:
                     print(
                         'rowsIn - Subcommand options: "[TABLE]". See "help" for more info. "q" to exit this submenu'
                     )
-                    subcommand_args = input("Enter Subcommand: ").split()
-                    if subcommand_args[0] == "q":
+                    subcommand_args = input("\nEnter Subcommand: ").split()
+                    if (
+                        subcommand_args[0].lower() == "q"
+                        or subcommand_args[0].lower() == "quit"
+                    ):
                         break
-                    if subcommand_args[0] == "help":
+                    if subcommand_args[0].lower() == "help":
                         print(helpMenu())
                         continue
                     user_args = subcommand_args
@@ -472,10 +481,13 @@ while True:
                         print(
                             'rowsIn - Subcommand options: "[TABLE]". See "help" for more info. "q" to exit this submenu'
                         )
-                        subcommand_args = input("Enter Subcommand: ").split()
-                        if subcommand_args[0] == "q":
+                        subcommand_args = input("\nEnter Subcommand: ").split()
+                        if (
+                            subcommand_args[0].lower() == "q"
+                            or subcommand_args[0].lower() == "quit"
+                        ):
                             break
-                        if subcommand_args[0] == "help":
+                        if subcommand_args[0].lower() == "help":
                             print(helpMenu())
                             continue
                         user_args = subcommand_args
@@ -489,10 +501,13 @@ while True:
                     print(
                         'dataPreview - Subcommand options: "[TABLE]", [NUMBER]. Number is optional. See "help" for more info. "q" to exit this submenu'
                     )
-                    subcommand_args = input("Enter Subcommand: ").split()
-                    if subcommand_args[0] == "q":
+                    subcommand_args = input("\nEnter Subcommand: ").split()
+                    if (
+                        subcommand_args[0].lower() == "q"
+                        or subcommand_args[0].lower() == "quit"
+                    ):
                         break
-                    if subcommand_args[0] == "help":
+                    if subcommand_args[0].lower() == "help":
                         print(helpMenu())
                         continue
                     user_args = subcommand_args
@@ -517,7 +532,7 @@ while True:
                         print(
                             'dataPreview - Subcommand options: "[TABLE]", [NUMBER]. Number is optional. See "help" for more info. "q" to exit this submenu'
                         )
-                        subcommand_args = input("Enter Subcommand: ").split()
+                        subcommand_args = input("\nEnter Subcommand: ").split()
                         if subcommand_args[0] == "q":
                             break
                         if subcommand_args[0] == "help":
@@ -539,10 +554,27 @@ while True:
         print(f'Invalid command: {user_command} See "help" for a full list.')
         continue
 
-    # TODO: subcommand stuff for arbitrary SQL command
+    param_count = query.count("?")
+    while len(user_args) < param_count:
+        print("Command is missing arguments. Please provide them in your subcommand.")
+        help = helpMenu()
+        start = help.find(user_command)
+        if start != -1:
+            end = help.find("\n", start)
+            command_help = help[start:end]
+            print(command_help)
+        subcommand_args = input("\nEnter Subcommand: ").split()
+        if subcommand_args[0].lower() == "q" or subcommand_args[0].lower() == "quit":
+            break
+        if subcommand_args[0].lower() == "help":
+            print(helpMenu())
+            continue
+        user_args = subcommand_args
+    if len(user_args) < param_count:
+        continue
 
     # trim off extra args not supported by the query
-    user_args = user_args[: query.count("?")]
+    user_args = user_args[:param_count]
 
     # Run SQL
     try:
