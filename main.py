@@ -298,6 +298,46 @@ def bellwetherPumaQuery(cur):
     print(bellwether_ranking.head(10))
 
 
+def bellwetherStateQuery(cur):
+    raw_wavgs = cur.execute("SELECT * FROM StateProfile")
+    raw_wavgs_rows = raw_wavgs.fetchall()
+    columns = [d[0] for d in raw_wavgs.description]
+
+    puma_stats = pd.DataFrame(raw_wavgs_rows, columns=columns)
+    columns.remove("STATE")
+    puma_stats = puma_stats.set_index(["STATE"])
+    feature_cols = columns
+
+    # All of this math and statistics heavy stuff was
+    # handled mostly by Claude Sonnet 4.6
+
+    X = puma_stats[feature_cols].values
+
+    dataset_avgs = cur.execute("SELECT * FROM NationalAvg").fetchall()
+    col_names = [d[0] for d in cur.description]
+    national_df = pd.DataFrame(dataset_avgs, columns=col_names)
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    national_scaled = scaler.transform(national_df[feature_cols].values)
+
+    # LedoitWolf handles near-singular matrices via shrinkage
+    lw_cov = LedoitWolf().fit(X_scaled)
+    inv_cov = lw_cov.get_precision()
+
+    # Compute distances
+    distances = [mahalanobis(row, national_scaled[0], inv_cov) for row in X_scaled]
+
+    puma_stats["mahal_dist"] = distances
+    puma_stats["p_value"] = 1 - chi2.cdf(
+        puma_stats["mahal_dist"] ** 2, df=len(feature_cols)
+    )
+
+    bellwether_ranking = puma_stats[["mahal_dist", "p_value"]].sort_values("mahal_dist")
+    print(bellwether_ranking.head(10))
+
+
 # --SETUP--
 first_run = not os.path.isfile(DB_FILE)
 
@@ -323,9 +363,9 @@ if first_run:
         bellwether_puma_view = Path(SQL_DIR + "bellwetherPuma.sql").read_text(
             encoding="utf-8"
         )
-        """bellwether_state = Path(SQL_DIR + "bellwetherPuma.sql").read_text(
+        bellwether_state = Path(SQL_DIR + "bellwetherState.sql").read_text(
             encoding="utf-8"
-        )"""
+        )
         national_avg_view = Path(SQL_DIR + "nationalAvg.sql").read_text(
             encoding="utf-8"
         )
@@ -339,7 +379,7 @@ if first_run:
         cur.executescript(insert_into_mapping)
         cur.executescript(insert_into_puma)
         cur.executescript(bellwether_puma_view)
-        # cur.executescript(bellwether_state)
+        cur.executescript(bellwether_state)
         cur.executescript(national_avg_view)
     except sqlite3.Error as e:
         print(f"SQL error during setup: {e}")
@@ -383,8 +423,14 @@ while True:
                             f"A SQL error occured during bellwether calculation.\nError: {er}"
                         )
                     break
-                # else if uArgs[0].lower() == "state":
-                # bellwetherPumaQuery(cur)
+                elif len(user_args) > 0 and user_args[0].lower() == "state":
+                    try:
+                        bellwetherStateQuery(cur)
+                    except sqlite3.Error as er:
+                        print(
+                            f"A SQL error occured during bellwether calculation.\nError: {er}"
+                        )
+                    break
                 else:
                     print(
                         'bellwether - Subcommand options: "puma", "state". See "help" for more info. "q" to exit this submenu'
@@ -554,6 +600,18 @@ while True:
                 query += " LIMIT ?;"
                 printQueryResult(cur.execute(query, (user_args[1],)))
             continue
+
+    command_blocklist = [
+        "createTables",
+        "bellwetherPuma",
+        "bellwetherState",
+        "insertIntoMapping",
+        "insertIntoPuma",
+        "nationalAvg",
+    ]
+    if any(user_command in s for s in command_blocklist):
+        print(f'Invalid command: {user_command} See "help" for a full list.')
+        continue
 
     try:
         query = Path(SQL_DIR + user_command + ".sql").read_text(encoding="utf-8")
