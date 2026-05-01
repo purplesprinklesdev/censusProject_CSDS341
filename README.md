@@ -25,6 +25,8 @@ Tested and working on NixOS, MacOS, and Windows 11.
 - `./main.py` to start the CLI
 
 - You should now see a prompt that says `Enter Command:`
+  
+- Type "q" and hit enter to quit, and next you should get an API key set up
 
 #### Windows, MacOS, Other Linux Distros
 
@@ -37,6 +39,8 @@ Tested and working on NixOS, MacOS, and Windows 11.
 - Run `python main.py` to start the CLI
 
 - You should now see a prompt that says `Enter Command:`
+
+- Type "q" and hit enter to quit, and next you should get an API key set up
 
 ## Add API Key
 
