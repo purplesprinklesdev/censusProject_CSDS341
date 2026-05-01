@@ -87,3 +87,25 @@ Once you have pulled data successfully, you can execute various queries on it. T
 - `householdsInState [STATE]` - counts the number of households in the state (abbreviation)
 - `householdsInPuma [STATE] [PUMA]` - counts the number of households in the puma
 - `pumasInState [STATE]` - displays all PUMAs and their human-readable names in [STATE]
+
+### Example Commands
+
+- `pctInsured` - Percentage of people in the currently downloaded dataset who have health insurance
+
+- `multilingualWorkersNoHIByRace` - Percentage of multilingual workers without health insurance coverage, grouped by race, in the currently downloaded dataset
+
+- `bellwether puma` - Calculates the top 10 bellwether pumas in the currently downloaded dataset and shows their Mahalonobis distances and p values. 
+
+- `bellwether state` - Calculates the top 10 “bellwether states” in the U.S. and shows their Mahalonobis distances and p values. (must have entire U.S. downloaded)
+
+- `pull all` - Pulls the entire US dataset 
+
+- `pull NY` - Pulls the New York dataset 
+
+- `datapreview Household` - Shows the first 15 rows in the Household table
+
+- `eligibleVotersByPuma` - Shows the number of eligible voters and percentage of eligible voters in each PUMA
+
+- `rowsIn Person` - Shows the number of rows in the Person table in the downloaded dataset
+
+- `peopleInData` - Shows the number of people in the downloaded dataset
