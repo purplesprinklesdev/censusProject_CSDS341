@@ -56,6 +56,12 @@ You should get started by pulling census data. You can pull a state, which takes
 
 Once you have pulled data successfully, you can execute various queries on it. Try "countUnder 200", and check that you get a realistic value for your dataset. (It should be your region's population)
 
+## Using the Web UI
+
+Once commands in the CLI are working, try out the web UI!
+
+`python app.py` starts up the server. You should see a link to a locally-hosted frontend.
+
 ## Command List
 
 - `q` - quits the program, or exits subcommand

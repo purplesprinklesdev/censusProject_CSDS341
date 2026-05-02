@@ -1,3 +1,5 @@
 db.db
 .venv/
 .env
+.DS_Store
+

@@ -22,6 +22,7 @@
       flex-direction: column;
       padding: 24px 16px;
       gap: 8px;
+      overflow-y: auto;
     }
 
     .sidebar-title {
@@ -85,21 +86,29 @@
 
     /* ── Param panel ── */
     .param-panel {
-      padding: 24px 28px;
+      padding: 20px 24px;
       border-bottom: 1px solid #f0f0f0;
       display: flex;
-      align-items: center;
-      gap: 12px;
+      align-items: flex-end;
+      gap: 16px;
+      flex-wrap: wrap;
     }
 
-    .param-panel label {
-      font-size: 0.9rem;
-      color: #444;
-      white-space: nowrap;
+    .param-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
     }
 
-    .param-panel input[type=number] {
-      width: 90px;
+    .param-field label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .param-field input {
       padding: 7px 10px;
       border: 1px solid #dde;
       border-radius: 6px;
@@ -107,17 +116,18 @@
       outline: none;
     }
 
-    .param-panel input[type=number]:focus { border-color: #3b5bdb; }
+    .param-field input:focus { border-color: #3b5bdb; }
 
     .run-btn {
       background: #3b5bdb;
       color: white;
       border: none;
-      padding: 8px 18px;
+      padding: 8px 20px;
       border-radius: 6px;
       font-size: 0.875rem;
       cursor: pointer;
       transition: background 0.15s;
+      height: 36px;
     }
 
     .run-btn:hover { background: #2f4ac0; }
@@ -189,11 +199,11 @@
 
 <aside class="sidebar">
   <div class="sidebar-title">Queries</div>
-  {% for name, label, has_param in queries %}
+  {% for name, label, params in queries %}
   <button
     data-name="{{ name }}"
     data-label="{{ label }}"
-    data-has-param="{{ 'true' if has_param else 'false' }}"
+    data-params='{{ params | tojson }}'
     onclick="selectQuery(this)">
     {{ label }}
   </button>
@@ -213,52 +223,82 @@
 
 <script>
   let activeBtn = null;
+  let currentFetch = null;
 
   function selectQuery(btn) {
-    const name = btn.dataset.name;
-    const label = btn.dataset.label;
-    const hasParam = btn.dataset.hasParam === 'true';
+    const name   = btn.dataset.name;
+    const label  = btn.dataset.label;
+    const params = JSON.parse(btn.dataset.params);  // null or [{label, type, ...}]
 
     if (activeBtn) activeBtn.classList.remove('active');
     btn.classList.add('active');
     activeBtn = btn;
     document.getElementById('query-label').textContent = label;
 
-    if (hasParam) {
-      showParamInput(name);
+    if (params) {
+      showParamInput(name, params);
     } else {
-      fetchQuery(name, null);
+      fetchQuery(name, []);
     }
   }
 
-  function showParamInput(name) {
+  function showParamInput(name, params) {
+    const fieldsHtml = params.map((p, i) => {
+      const extra = p.type === 'text'
+        ? 'maxlength="2" style="width:60px;text-transform:uppercase"'
+        : `style="width:90px" ${p.min !== undefined ? `min="${p.min}"` : ''} ${p.max !== undefined ? `max="${p.max}"` : ''}`;
+      return `
+        <div class="param-field">
+          <label>${p.label}</label>
+          <input id="pv${i}" type="${p.type}" ${extra}>
+        </div>`;
+    }).join('');
+
     document.getElementById('results-card').innerHTML = `
       <div class="param-panel">
-        <label>Age threshold (0–100):</label>
-        <input type="number" id="param-val" min="0" max="100" value="20">
-        <button class="run-btn" onclick="fetchQuery('${name}', +document.getElementById('param-val').value)">
-          Run
-        </button>
+        ${fieldsHtml}
+        <button class="run-btn" onclick="runWithParams('${name}', ${params.length})">Run</button>
       </div>
       <div id="param-results"></div>
     `;
-    document.getElementById('param-val').addEventListener('keydown', e => {
-      if (e.key === 'Enter')
-        fetchQuery(name, +document.getElementById('param-val').value);
+
+    document.querySelectorAll('[id^="pv"]').forEach(input => {
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') runWithParams(name, params.length);
+      });
     });
+    document.getElementById('pv0')?.focus();
   }
 
-  function fetchQuery(name, value) {
-    const target = (value !== null && document.getElementById('param-results'))
+  function runWithParams(name, count) {
+    const values = Array.from({length: count}, (_, i) => document.getElementById(`pv${i}`).value);
+    fetchQuery(name, values);
+  }
+
+  function fetchQuery(name, values) {
+    // Cancel any previous in-flight request so its result doesn't overwrite ours
+    if (currentFetch) {
+      currentFetch.abort();
+      currentFetch = null;
+    }
+
+    const target = (values.length > 0 && document.getElementById('param-results'))
       ? document.getElementById('param-results')
       : document.getElementById('results-card');
+
     target.innerHTML = '<div class="loading"><span class="spinner"></span>Running...</div>';
 
-    const url = value !== null ? `/run/${name}?value=${encodeURIComponent(value)}` : `/run/${name}`;
+    const qs  = values.map(v => `value=${encodeURIComponent(v)}`).join('&');
+    const url = `/run/${name}${qs ? '?' + qs : ''}`;
 
-    fetch(url)
+    const controller = new AbortController();
+    currentFetch = controller;
+
+    fetch(url, { signal: controller.signal })
       .then(r => r.json())
       .then(data => {
+        currentFetch = null;
+
         if (data.error) {
           target.innerHTML = `<div class="error-msg">Error: ${data.error}</div>`;
           return;
@@ -285,7 +325,9 @@
                  <div class="row-count">${data.rows.length} row${data.rows.length !== 1 ? 's' : ''}</div>`;
         target.innerHTML = html;
       })
-      .catch(() => {
+      .catch(err => {
+        if (err.name === 'AbortError') return;
+        currentFetch = null;
         target.innerHTML = '<div class="error-msg">Failed to reach the server.</div>';
       });
   }
