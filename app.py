@@ -90,9 +90,23 @@ def run_bellwether_puma():
     try:
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
+
+        # Ensure NationalAvg view exists before querying it
+        nat_sql = Path(SQL_DIR + "nationalAvg.sql").read_text(encoding="utf-8")
+        create_nat = re.sub(
+            r"CREATE\s+VIEW\s+(?!IF\s+NOT\s+EXISTS\s)",
+            "CREATE VIEW IF NOT EXISTS ",
+            nat_sql, count=1, flags=re.IGNORECASE,
+        )
+        cur.execute(create_nat)
+
         result = cur.execute("SELECT * FROM PumaProfile")
         rows = result.fetchall()
         all_columns = [d[0] for d in result.description]
+
+        nat_result = cur.execute("SELECT * FROM NationalAvg")
+        nat_rows = nat_result.fetchall()
+        nat_columns = [d[0] for d in nat_result.description]
         conn.close()
     except sqlite3.OperationalError as e:
         return jsonify({"error": str(e)}), 500
@@ -100,17 +114,20 @@ def run_bellwether_puma():
     if not rows:
         return jsonify({"columns": [], "rows": []})
 
-    df = pd.DataFrame(rows, columns=all_columns)
     id_cols = ["STATE", "PUMA", "Puma_Name"]
     feature_cols = [c for c in all_columns if c not in id_cols]
+
+    df = pd.DataFrame(rows, columns=all_columns)
     df = df.dropna(subset=feature_cols)
+    df = df.set_index(["STATE", "PUMA", "Puma_Name"])
+
+    national_df = pd.DataFrame(nat_rows, columns=nat_columns)
 
     X = df[feature_cols].values.astype(float)
-    national_vec = X.mean(axis=0)
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    national_scaled = scaler.transform(national_vec.reshape(1, -1))
+    national_scaled = scaler.transform(national_df[feature_cols].values)
 
     lw_cov = LedoitWolf().fit(X_scaled)
     inv_cov = lw_cov.get_precision()
@@ -119,7 +136,7 @@ def run_bellwether_puma():
     df["Bellwether Score"] = [round(d, 4) for d in distances]
     df["p_value"] = [round(1 - chi2.cdf(d ** 2, df=len(feature_cols)), 4) for d in distances]
 
-    out = df[["STATE", "PUMA", "Puma_Name", "Bellwether Score", "p_value"]].sort_values("Bellwether Score")
+    out = df[["Bellwether Score", "p_value"]].sort_values("Bellwether Score").reset_index()
     return jsonify({"columns": list(out.columns), "rows": out.values.tolist()})
 
 

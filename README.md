@@ -60,7 +60,7 @@ Once you have pulled data successfully, you can execute various queries on it. T
 
 Once commands in the CLI are working, try out the web UI!
 
-`python app.py` starts up the server. You should see a link to a locally-hosted frontend.
+Start the server using `python app.py`. Then go to http://127.0.0.1:5000 to use the web UI.
 
 ## Command List
 
